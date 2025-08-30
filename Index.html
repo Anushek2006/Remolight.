@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Manufacturing Dashboard</title>
+	<!-- External Libraries -->
+	<script src="https://cdn.tailwindcss.com"></script>
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
+	<!-- Fonts and Icons -->
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+	
+	<!-- Internal Stylesheet -->
+	<style>
+		/* ==========================================================================
+		   CSS Variables for Theming
+		   ========================================================================== */
+		:root {
+			--bg-color: #010005;
+			--card-bg-color: #0b070f;
+			--text-color: white;
+			--text-muted-color: #a0aec0;
+			--border-color: rgba(255, 255, 255, 0.1);
+			--icon-rotation-color: conic-gradient(from 180deg at 50% 50%, #8c7ae6, #e879f9, #8c7ae6);
+			--ask-ai-glow: linear-gradient(90deg, #a855f7, #6366f1, #a855f7);
+		}
+
+		body.light-theme {
+			--bg-color: #f1f5f9;
+			--card-bg-color: #ffffff;
+			--text-color: #1e293b;
+			--text-muted-color: #64748b;
+			--border-color: rgba(0, 0, 0, 0.1);
+			--icon-rotation-color: conic-gradient(from 180deg at 50% 50%, #f43f5e, #facc15, #4ade80, #38bdf8, #a78bfa, #f43f5e);
+			--ask-ai-glow: linear-gradient(90deg, #f43f5e, #facc15, #4ade80, #38bdf8, #a78bfa, #f43f5e);
+		}
+
+		/* ==========================================================================
+		   Base Styles & Theme Transitions
+		   ========================================================================== */
+		html, body {
+			margin: 0; padding: 0; height: 100%; width: 100%;
+			overflow-x: hidden; font-family: 'Inter', sans-serif;
+			background-color: var(--bg-color); color: var(--text-color);
+			scroll-behavior: smooth; transition: background-color 0.5s ease, color 0.5s ease;
+		}
+
+		/* ==========================================================================
+		   Layout Containers
+		   ========================================================================== */
+		.main-container-wrapper { display: flex; }
+		.main-container {
+			flex-grow: 1; min-height: 100vh;
+			transition: margin-left 0.4s ease, transform 0.4s ease, width 0.4s ease;
+			margin-left: 5rem; width: calc(100% - 5rem);
+		}
+		.hidden-page, .hidden { display: none !important; }
+		#content-container { flex-grow: 1; padding: 1.5rem; width: 100%; }
+
+		/* ==========================================================================
+		   Collapsible Sidebar
+		   ========================================================================== */
+		#collapsible-sidebar {
+			position: fixed; top: 0; left: 0; height: 100vh; width: 5rem;
+			background-color: var(--card-bg-color); z-index: 1001;
+			overflow: hidden; transition: width 0.4s ease, background-color 0.5s ease;
+			border-right: 1px solid var(--border-color); display: flex; flex-direction: column;
+		}
+		#collapsible-sidebar:hover { width: 16rem; }
+		body.sidebar-expanded .main-container { margin-left: 16rem; width: calc(100% - 16rem); }
+		.sidebar-brand { font-size: 1.75rem; min-height: 4rem; }
+		.sidebar-link-text { opacity: 0; transition: opacity 0.3s ease; white-space: nowrap; }
+		#collapsible-sidebar:hover .sidebar-link-text { opacity: 1; }
+		.nav-item.active { background-color: rgba(140, 122, 230, 0.2); color: #8c7ae6; font-weight: 600; }
+
+		/* Sidebar logo (visible even when collapsed) */
+		.sidebar-brand-inner {
+			display:flex; align-items:center; gap:10px;
+		}
+		/* Keep logo left-anchored to avoid shifting on hover expand */
+		.sidebar-brand-wrap {
+			display:flex; align-items:center; justify-content:flex-start; width:100%;
+			padding: 1rem;
+		}
+		.sidebar-logo {
+			width:55px; height:55px; border-radius:8px; object-fit:cover; flex:0 0 auto;
+			box-shadow:0 6px 16px rgba(140,122,230,.32);
+		}
+
+		/* ==========================================================================
+		   Side Panels (AI & Profile)
+		   ========================================================================== */
+		#ai-panel, #profile-panel {
+			position: fixed; top: 0; right: -450px; width: 450px; max-width: 90vw; height: 100%;
+			background-color: var(--card-bg-color); z-index: 999;
+			transition: right 0.4s ease; padding: 1.5rem; display: flex; flex-direction: column;
+			border-left: 1px solid var(--border-color);
+		}
+		#ai-panel.active, #profile-panel.active { right: 0; }
+		
+		body.panel-active .main-container { transform: translateX(-225px); width: calc(100% - 450px - 5rem); }
+		body.panel-active.sidebar-expanded .main-container { width: calc(100% - 450px - 16rem); }
+		@media (max-width: 1023px) {
+			 body.panel-active .main-container { transform: translateX(0); width: calc(100% - 5rem); }
+			 body.panel-active.sidebar-expanded .main-container { width: calc(100% - 16rem); }
+		}
+
+		/* ==========================================================================
+		   Card & Component Styles
+		   ========================================================================== */
+		.card, .square-card, .ai-card, .machine-card, .feeder-card, .safety-card {
+			background-color: var(--card-bg-color);
+			/* Enhanced default shadow */
+			box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255,255,255,0.04) inset;
+			transition: transform 0.3s ease, box-shadow 0.3s ease, background-color 0.5s ease;
+			position: relative; z-index: 1; overflow: hidden; border-radius: 1.5rem;
+			color: var(--text-color);
+		}
+		#main-header { overflow: visible; }
+		.card:hover, .square-card:hover, .machine-card:hover, .feeder-card:hover, .safety-card:hover {
+			transform: translateY(-6px);
+			box-shadow: 0 18px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.05) inset;
+			z-index: 2;
+		}
+		.square-card { border-radius: 2rem; display: flex; flex-direction: column; justify-content: space-between; height: 180px; }
+		.machine-card, .ai-report-card { border-radius: 1.5rem; padding: 1.5rem; display: flex; flex-direction: column; }
+		
+		@keyframes animated-gradient { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+		.consumption-gradient {
+			background: linear-gradient(45deg, rgba(138, 43, 226, 0.4), rgba(255, 165, 0, 0.2), rgba(0, 0, 255, 0.2), rgba(255, 192, 203, 0.4));
+			background-size: 400% 400%;
+			animation: animated-gradient 15s ease infinite;
+		}
+
+		.chat-bubble.user { background-color: #8c7ae6; }
+		.chat-bubble.ai { background-color: #1f2937; }
+		body.light-theme .chat-bubble.ai { background-color: #e2e8f0; color: #1e293b; }
+		
+		@keyframes rotate-glow { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+		.icon-effect { position: relative; z-index: 1; }
+		.icon-effect::before {
+			content: ''; position: absolute; left: -5px; top: -5px;
+			width: calc(100% + 10px); height: calc(100% + 10px);
+			background: var(--icon-rotation-color); border-radius: 50%;
+			z-index: -1; animation: rotate-glow 4s linear infinite;
+		}
+		
+		@keyframes animated-glow { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+		/* Ask AI button: moving orb + subtle animated glow; keep label hidden */
+		.ask-ai-button { position: relative; overflow: hidden; }
+		.ask-ai-button::before {
+			content: '';
+			position: absolute; inset: 0;
+			background: var(--ask-ai-glow);
+			background-size: 200% 200%;
+			filter: blur(15px);
+			animation: animated-glow 5s ease infinite;
+			opacity: .55;
+			z-index: 0;
+		}
+		.ask-ai-button > * { position: relative; z-index: 1; }
+		.ask-ai-button .sidebar-link-text { 
+			display: block !important; 
+			opacity: 1 !important; 
+			color: var(--text-color) !important;
+			font-weight: 600;
+		}
+
+		/* Animated AI orb icon */
+		.ai-orb {
+			position: relative; width: 26px; height: 26px; border-radius: 50%;
+			background:
+				radial-gradient(circle at 35% 35%, #89f, transparent 45%),
+				radial-gradient(circle at 70% 70%, #5ff, transparent 55%),
+				radial-gradient(circle at 50% 50%, #a0f8, #49f2 60%, transparent 70%);
+			box-shadow:
+				0 0 10px rgba(99,102,241,.6),
+				0 0 24px rgba(99,102,241,.25);
+			animation: orb-rotate 5s linear infinite;
+		}
+		.ai-orb::before, .ai-orb::after {
+			content:""; position:absolute; inset:-4px; border-radius:50%;
+			border:2px dashed rgba(99,102,241,.35);
+			animation: orb-ring 6s linear infinite;
+		}
+		.ai-orb::after { inset:-8px; animation-duration: 9s; animation-direction: reverse; opacity:.7; }
+		@keyframes orb-rotate { to { transform: rotate(360deg) } }
+		@keyframes orb-ring { to { transform: rotate(-360deg) } }
+
+		.dropdown { position: relative; display: inline-block; }
+		.dropdown-content {
+			display: none; position: absolute; right: 0; top: 110%;
+			background-color: var(--card-bg-color); min-width: 220px;
+			box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); border-radius: 0.75rem;
+			z-index: 1002; padding: 0.5rem; border: 1px solid var(--border-color);
+			opacity: 0; transform: translateY(-10px);
+			transition: opacity 0.2s ease, transform 0.2s ease;
+		}
+		.dropdown.active .dropdown-content { display: block; opacity: 1; transform: translateY(0); }
+		.dropdown-item { padding: 0.75rem 1rem; display: flex; align-items: center; border-radius: 0.5rem; cursor: pointer; }
+		.dropdown-item:hover { background-color: rgba(140, 122, 230, 0.2); }
+		
+		.modal-overlay {
+			position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+			background-color: rgba(0, 0, 0, 0.7); z-index: 1050;
+			display: none; align-items: center; justify-content: center;
+		}
+		.modal-content {
+			background-color: var(--card-bg-color); padding: 2rem;
+			border-radius: 1.5rem; width: 90%; max-width: 600px;
+			max-height: 90vh; overflow-y: auto;
+		}
+
+		#loading-screen {
+			position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+			background-color: var(--bg-color); z-index: 1100;
+			display: flex; flex-direction: column; align-items: center; justify-content: center;
+		}
+		
+		.loading-logo {
+			width: 80px; height: 80px; border-radius: 12px; margin-bottom: 20px;
+			animation: logo-pulse 2s ease-in-out infinite;
+			box-shadow: 0 10px 28px rgba(140, 122, 230, 0.28);
+		}
+		
+		body.light-theme .loading-logo {
+			box-shadow: 0 10px 28px rgba(99, 102, 241, 0.28);
+		}
+		
+		@keyframes logo-pulse {
+			0%, 100% { transform: scale(1); opacity: 1; }
+			50% { transform: scale(1.1); opacity: 0.8; }
+		}
+		
+		.loading-spinner {
+			width: 60px; height: 60px; position: relative; margin-bottom: 20px;
+		}
+		
+		.loading-spinner::before {
+			content: '';
+			position: absolute; inset: 0; border-radius: 50%;
+			border: 3px solid transparent;
+			border-top-color: #8c7ae6;
+			animation: spin 1s linear infinite;
+		}
+		
+		body.light-theme .loading-spinner::before {
+			border-top-color: #6366f1;
+		}
+		
+		.loading-spinner::after {
+			content: '';
+			position: absolute; inset: 8px; border-radius: 50%;
+			border: 2px solid transparent;
+			border-bottom-color: #8c7ae6;
+			animation: spin 1.5s linear infinite reverse;
+		}
+		
+		body.light-theme .loading-spinner::after {
+			border-bottom-color: #6366f1;
+		}
+		
+		@keyframes spin { 
+			0% { transform: rotate(0deg); } 
+			100% { transform: rotate(360deg); } 
+		}
+
+		.feeder-card { padding: 1.5rem; }
+		.feeder-status.on { color: #22c55e; }
+		.feeder-status.off { color: #ef4444; }
+		.feeder-btn {
+			padding: 0.5rem 1.5rem; border-radius: 0.5rem;
+			font-weight: 600; transition: all 0.2s ease;
+		}
+		.feeder-btn.on { background-color: #22c55e; color: white; }
+		.feeder-btn.off { background-color: #ef4444; color: white; }
+		.feeder-btn:not(.active) { background-color: transparent; border: 1px solid var(--border-color); color: var(--text-muted-color); }
+
+		.profile-input {
+			width: 100%; background-color: var(--bg-color);
+			border: 1px solid var(--border-color); border-radius: 0.5rem;
+			padding: 0.5rem; color: var(--text-color);
+		}
+		.profile-input:disabled { background-color: transparent; border-color: transparent; }
+
+		/* ==========================================================================
+		   Metallic styling for Profile Panel
+		   ========================================================================== */
+		#profile-panel {
+			background:
+				linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.2)),
+				radial-gradient(120% 60% at 80% -20%, rgba(255,255,255,0.08), transparent 60%),
+				linear-gradient(135deg, #1a1a1d, #0e0b13 55%, #151219);
+			box-shadow: 0 20px 60px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
+			border-left: 1px solid rgba(255,255,255,0.08);
+		}
+		.metal-surface {
+			position: relative;
+			background:
+				linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01)),
+				repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 6px),
+				linear-gradient(135deg, #19161f, #0c0a12 55%, #16131b);
+			border: 1px solid rgba(255,255,255,0.08);
+			border-radius: 14px;
+			box-shadow:
+				inset 0 1px 0 rgba(255,255,255,0.04),
+				0 12px 28px rgba(0,0,0,0.45);
+		}
+		.metal-surface::after {
+			content:""; position:absolute; left:0; right:0; top:0; height:2px;
+			background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+			opacity:.6;
+		}
+		body.light-theme #profile-panel {
+			background:
+				linear-gradient(180deg, rgba(0,0,0,0.03), rgba(0,0,0,0.04)),
+				radial-gradient(120% 60% at 80% -20%, rgba(0,0,0,0.05), transparent 60%),
+				linear-gradient(135deg, #fafafa, #f3f6ff 55%, #eef0f8);
+			border-left: 1px solid rgba(0,0,0,0.06);
+		}
+		body.light-theme .metal-surface {
+			background:
+				linear-gradient(180deg, rgba(0,0,0,0.03), rgba(0,0,0,0.01)),
+				repeating-linear-gradient(90deg, rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 1px, transparent 1px, transparent 6px),
+				linear-gradient(135deg, #ffffff, #f6f8ff 55%, #f0f2fa);
+			border: 1px solid rgba(0,0,0,0.08);
+			box-shadow:
+				inset 0 1px 0 rgba(255,255,255,0.8),
+				0 12px 28px rgba(0,0,0,0.12);
+		}
+
+		/* ==========================================================================
+		   RemoLight Login (integrated)
+		   ========================================================================== */
+		:root {
+			--rl-bg:#0d0d0d;
+			--rl-white:#ffffff;
+			--rl-purple:#d600db;
+			--rl-purple-dark:#6f1871;
+			--rl-cyan:#12d6df;
+			--rl-stroke:#ffffff20;
+		}
+		#login-page { position: relative; min-height: 100vh; overflow: hidden; }
+		.rl-grid {
+			position: fixed; inset:0; pointer-events:none; opacity:.06;
+			background:
+				linear-gradient(transparent 31px, #fff2 32px),
+				linear-gradient(90deg, transparent 31px, #fff2 32px);
+			background-size:32px 32px;
+			mask-image:radial-gradient(60% 60% at 50% 50%, #000 55%, transparent 100%);
+			animation:rl-gridFade 14s linear infinite alternate; z-index: 0;
+		}
+		@keyframes rl-gridFade { from{opacity:.05} to{opacity:.09} }
+
+		.rl-canvas { position:relative; min-height:100svh; padding:40px clamp(16px, 4vw, 48px); z-index: 1; }
+		.rl-layout {
+			max-width:1440px; margin:0 auto; display:flex; align-items:flex-start; justify-content:flex-start;
+			gap:32px; position:relative; min-height:calc(100svh - 80px);
+		}
+		.rl-blob { position:absolute; pointer-events:none; filter:blur(60px); opacity:.9; mix-blend-mode:screen; }
+		.rl-blob.top { width:240px;height:240px; top:60px; left:640px;
+			background:radial-gradient(circle at 30% 30%, var(--rl-purple), transparent 60%),
+						radial-gradient(circle at 70% 70%, var(--rl-cyan), transparent 60%); }
+		.rl-blob.right { width:320px;height:320px; bottom:40px; right:28px;
+			background:radial-gradient(circle at 40% 40%, var(--rl-purple), transparent 60%),
+						radial-gradient(circle at 75% 60%, #8a2be2, transparent 60%); }
+		.rl-blob.left { width:320px;height:320px; bottom:0; left:200px; transform:rotate(-16deg);
+			background:radial-gradient(circle at 60% 30%, #163bdb, transparent 60%),
+						radial-gradient(circle at 30% 70%, var(--rl-purple-dark), transparent 60%); }
+
+		.rl-brand { flex:1 1 54%; min-width:320px; position:relative; padding-left:8px; padding-top:20px }
+		.rl-brand-row { display:flex; align-items:center; gap:14px; margin-bottom:10px }
+		.rl-brand-title-wrap { display:flex; align-items:center; gap:14px }
+		.rl-logo {
+			width:72px; height:72px; border-radius:12px; overflow:hidden; flex:0 0 auto;
+			box-shadow:0 10px 28px rgba(214,0,219,.28)
+		}
+		.rl-logo img { display:block; width:100%; height:100%; object-fit:cover }
+		.rl-brand-title { font-weight:800; font-size:42px; letter-spacing:.2px; position:relative }
+		.rl-brand-title::after {
+			content:""; position:absolute; left:0; right:0; bottom:-6px; height:2px;
+			background:linear-gradient(90deg, transparent, #ffffffaa 35%, transparent 70%);
+			transform:translateX(-40%); opacity:0; filter:blur(.6px);
+			animation:rl-shine 4s ease-in-out infinite;
+		}
+		@keyframes rl-shine {
+			0%{ transform:translateX(-60%); opacity:0 }
+			35%{ transform:translateX(0%); opacity:.9 }
+			70%{ transform:translateX(60%); opacity:0 }
+			100%{ transform:translateX(60%); opacity:0 }
+		}
+		.rl-brand-hey {
+			font-weight:800; font-size:72px; line-height:1.05; margin-top:24px;
+			text-shadow:0 10px 50px rgba(214,0,219,.18);
+			animation:rl-floatY 6s ease-in-out infinite;
+		}
+		.rl-brand-copy { max-width:560px; font-size:18px; color:#ececec; margin-top:18px; opacity:.95 }
+		@keyframes rl-floatY { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+
+		/* Right-centered card anchor */
+		.rl-card-anchor {
+			position:absolute; top:50%; right:clamp(16px, 4vw, 48px); transform:translateY(-50%);
+			display:flex; justify-content:flex-end; width:min(620px, 44vw);
+			perspective:1000px;
+		}
+		.rl-card {
+			position:relative; width:100%; border-radius:26px;
+			background:linear-gradient(180deg, #000000cc, #0a0a0acc);
+			backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+			border:1px solid var(--rl-stroke);
+			box-shadow:0 0 0 1px #ffffff12 inset, 0 28px 60px rgba(0,0,0,.55), 0 0 120px rgba(214,0,219,.14);
+			overflow:hidden;
+			transform-style:preserve-3d;
+			will-change:transform;
+			transition:transform .14s ease;
+		}
+		.rl-card::before {
+			content:""; position:absolute; inset:-1px; border-radius:28px; padding:6px;
+			background:conic-gradient(from 210deg, var(--rl-purple), var(--rl-cyan), #000 40%, var(--rl-purple));
+			-webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+			-webkit-mask-composite:xor; mask-composite:exclude; opacity:.5; filter:blur(.2px)
+		}
+		.rl-card::after {
+			content:""; position:absolute; inset:0; border-radius:26px; pointer-events:none;
+			background:
+				radial-gradient(140% 70% at 50% -20%, rgba(214,0,219,.2), transparent 60%),
+				radial-gradient(100% 60% at 110% 110%, rgba(18,214,223,.12), transparent 70%);
+			animation:rl-ambient 8s ease-in-out infinite alternate;
+		}
+		@keyframes rl-ambient {
+			from{ box-shadow:0 0 0 rgba(0,0,0,0) }
+			to{ box-shadow:0 0 64px rgba(214,0,219,.15) inset }
+		}
+		.rl-card-inner { position:relative; display:flex; flex-direction:column; gap:28px; padding:56px 44px 40px; isolation:isolate }
+		.rl-card-title { font-size:60px; font-weight:800; letter-spacing:.3px; margin:4px 0 8px }
+
+		.rl-field { display:flex; flex-direction:column; gap:12px }
+		.rl-field-label { font-size:15px }
+		.rl-input {
+			height:66px; border-radius:16px; background:transparent; color:#fff;
+			border:1px solid #ffffffbf; padding:0 18px; font-size:17px; outline:none;
+			transition:border-color .15s ease, box-shadow .15s ease, background .15s ease, transform .12s ease;
+		}
+		.rl-input:focus { border-color:var(--rl-purple); box-shadow:0 0 0 8px rgba(214,0,219,.12); background:#ffffff08; transform:translateY(-1px) }
+
+		.rl-divider { height:1px; width:100%; background:#5a4c5a; margin-top:8px; opacity:.85 }
+
+		.rl-cta { display:flex; flex-direction:column; gap:14px }
+		.rl-btn {
+			display:inline-flex; align-items:center; justify-content:center; height:52px; width:100%;
+			border-radius:16px; border:1px solid #fff; color:#fff; font-weight:700; letter-spacing:.2px;
+			background:linear-gradient(180deg,var(--rl-purple) 20%, var(--rl-purple-dark) 62%, #000 90%);
+			cursor:pointer; transition:transform .08s ease, box-shadow .25s ease, filter .2s ease, opacity .2s ease;
+			position:relative; overflow:hidden;
+		}
+		.rl-btn:hover { box-shadow:0 14px 30px rgba(214,0,219,.32), 0 2px 0 rgba(255,255,255,.1) inset; filter:saturate(1.15); transform:translateY(-1px) }
+		.rl-btn:active { transform:translateY(0) }
+		.rl-btn::after {
+			content:""; position:absolute; inset:0; pointer-events:none;
+			background:linear-gradient(120deg, transparent 0%, #ffffff33 40%, transparent 60%);
+			transform:translateX(-120%); transition:transform .7s ease;
+		}
+		.rl-btn:hover::after { transform:translateX(120%) }
+		.rl-ripple {
+			position:absolute; border-radius:999px; transform:translate(-50%, -50%); pointer-events:none;
+			background:radial-gradient(circle, rgba(255,255,255,.5), transparent 60%);
+			width:12px; height:12px; animation:rl-ripple .7s ease-out forwards;
+		}
+		@keyframes rl-ripple { from{ opacity:.6; transform:translate(-50%, -50%) scale(.8) } to{ opacity:0; transform:translate(-50%, -50%) scale(16) } }
+
+		/* Rotating lights */
+		.rl-orbits { position:absolute; inset:-24%; pointer-events:none; z-index:0; filter:blur(10px) saturate(1.25) }
+		.rl-orbit { position:absolute; inset:0; border-radius:50%; animation:rl-rotate360 var(--rl-dur,16s) linear infinite; mix-blend-mode:screen }
+		.rl-orbit::before {
+			content:""; position:absolute; inset:0; border-radius:50%;
+			background:
+				radial-gradient(closest-side, rgba(214,0,219,.45), transparent 70%) top left / 45% 45% no-repeat,
+				radial-gradient(closest-side, rgba(18,214,223,.35), transparent 70%) bottom right / 40% 40% no-repeat;
+			transform:rotate(0.1deg); opacity:.9;
+		}
+		.rl-orbit.o1 { --rl-dur:18s; transform:rotate(0deg) scale(1.00) }
+		.rl-orbit.o2 { --rl-dur:26s; transform:rotate(30deg) scale(1.12); opacity:.85 }
+		.rl-orbit.o3 { --rl-dur:34s; transform:rotate(-22deg) scale(1.24); opacity:.75 }
+		.rl-sweep { position:absolute; inset:-30%; border-radius:50%;
+			background:conic-gradient(from 0deg, rgba(214,0,219,.18), transparent 35%, transparent 100%);
+			animation:rl-rotate360 20s linear infinite reverse; filter:blur(12px); mix-blend-mode:screen; opacity:.6 }
+		.rl-sweep2 { position:absolute; inset:-20%; border-radius:50%;
+			background:conic-gradient(from 90deg, rgba(18,214,223,.14), transparent 35%, transparent 100%);
+			animation:rl-rotate360 28s linear infinite; filter:blur(14px); mix-blend-mode:screen; opacity:.5 }
+		@keyframes rl-rotate360 { to { transform:rotate(360deg) } }
+
+		/* Particles */
+		.rl-particles { position:absolute; inset:-10%; pointer-events:none; overflow:hidden; z-index:0 }
+		.rl-particles span {
+			position:absolute; width:3px; height:3px; border-radius:50%; background:#fff8;
+			filter:blur(.2px); opacity:.6; animation:rl-floatUp var(--rl-t,10s) linear infinite;
+			box-shadow:0 0 8px rgba(255,255,255,.6), 0 0 24px rgba(214,0,219,.3);
+		}
+		@keyframes rl-floatUp {
+			from{ transform:translateY(40%) scale(.8) }
+			to{ transform:translateY(-60%) scale(1.2) }
+		}
+
+		/* Light mode adjustments for login */
+		body.light-theme .rl-brand-hey { color:#111; text-shadow:none }
+		body.light-theme .rl-brand-copy { color:#334155 }
+		body.light-theme .rl-card {
+			background: linear-gradient(180deg, #ffffffcc, #f5f7ffcc);
+			border: 1px solid rgba(0,0,0,.1);
+			box-shadow: 0 0 0 1px rgba(255,255,255,.6) inset, 0 18px 40px rgba(0,0,0,.15), 0 0 80px rgba(99,102,241,.14);
+		}
+		body.light-theme .rl-card::before {
+			background: conic-gradient(from 210deg, #b45fc1, #57d9e5, #ffffff 40%, #b45fc1);
+			opacity:.35;
+		}
+		body.light-theme .rl-card-title,
+		body.light-theme .rl-field-label { color:#111 }
+		body.light-theme .rl-input {
+			color:#111; border:1px solid rgba(0,0,0,.25); background:#ffffff80;
+		}
+		body.light-theme .rl-input::placeholder { color:#64748b }
+		body.light-theme .rl-input:focus {
+			box-shadow: 0 0 0 8px rgba(99,102,241,.12);
+			border-color:#8b5cf6; background:#fff;
+		}
+		body.light-theme .rl-divider { background:#e2e8f0 }
+
+		/* Responsive for login */
+		@media (max-width:1200px){
+			.rl-brand-title { font-size:36px }
+			.rl-brand-hey { font-size:56px }
+			.rl-card-anchor { position:relative; right:auto; top:auto; transform:none; width:min(680px, 92vw); margin:0 auto }
+		}
+		@media (max-width:720px){
+			.rl-canvas { padding:20px }
+			.rl-brand-hey { font-size:44px }
+			.rl-card-inner { padding:34px 22px 26px }
+			.rl-card-title { font-size:42px }
+			.rl-blob { display:none }
+			.rl-grid { opacity:.04 }
+		}
+		@media (prefers-reduced-motion:reduce){
+			.rl-grid,.rl-brand-hey,.rl-orbit,.rl-sweep,.rl-sweep2,.rl-brand-title::after,.rl-particles span{ animation:none !important; transform:none !important }
+		}
+	</style>
+</head>
+<body class="bg-[var(--bg-color)] text-[var(--text-color)]">
+	
+	<!-- Login Page -->
+	<div id="login-page">
+		<div class="rl-grid" aria-hidden="true"></div>
+		<main class="rl-canvas" role="main" aria-labelledby="rl-page-title">
+			<div class="rl-blob top" aria-hidden="true"></div>
+			<div class="rl-blob right" aria-hidden="true"></div>
+			<div class="rl-blob left" aria-hidden="true"></div>
+
+			<section class="rl-layout">
+				<!-- Branding Left -->
+				<div class="rl-brand">
+					<div class="rl-brand-row">
+						<div class="rl-brand-title-wrap">
+							<div class="rl-logo" title="Logo">
+								<img src="file:///C:/Users/ANUSHEK%20DAS/Downloads/Logo%20bgremoved.png" alt="RemoLight logo" />
+							</div>
+							<div class="rl-brand-title">RemoLight</div>
+						</div>
+					</div>
+					<div class="rl-brand-hey">Hey There!</div>
+					<p class="rl-brand-copy">
+						Welcome to the RemoLight — where data meets decisions, and machines speak your language.
+					</p>
+				</div>
+
+				<!-- Login Card -->
+				<div class="rl-card-anchor">
+					<section class="rl-card" aria-labelledby="rl-page-title" id="rlLoginCard">
+						<div class="rl-orbits" aria-hidden="true">
+							<div class="rl-orbit o1"></div>
+							<div class="rl-orbit o2"></div>
+							<div class="rl-orbit o3"></div>
+							<div class="rl-sweep"></div>
+							<div class="rl-sweep2"></div>
+						</div>
+
+						<div class="rl-particles" aria-hidden="true">
+							<span style="left:10%; bottom:-8%; --rl-t:10s"></span>
+							<span style="left:22%; bottom:-12%; --rl-t:12s"></span>
+							<span style="left:35%; bottom:-6%; --rl-t:9s"></span>
+							<span style="left:50%; bottom:-10%; --rl-t:11s"></span>
+							<span style="left:65%; bottom:-7%; --rl-t:13s"></span>
+							<span style="left:80%; bottom:-9%; --rl-t:10.5s"></span>
+						</div>
+
+						<div class="rl-card-inner">
+							<h1 id="rl-page-title" class="rl-card-title">Login</h1>
+
+							<label class="rl-field">
+								<span class="rl-field-label">Administrator ID</span>
+								<input id="adminIdInput" class="rl-input" type="text" placeholder="Enter your administrator ID" />
+							</label>
+							<p id="loginError" class="text-red-500 hidden">Invalid Administrator ID.</p>
+
+							<div class="rl-divider" aria-hidden="true"></div>
+
+							<div class="rl-cta">
+								<button class="rl-btn" type="button" id="loginBtn">
+									<span>Get Started</span>
+								</button>
+							</div>
+						</div>
+					</section>
+				</div>
+			</section>
+		</main>
+	</div>
+
+	<!-- Loading Screen -->
+	<div id="loading-screen" class="hidden">
+		<img class="loading-logo" src="file:///C:/Users/ANUSHEK%20DAS/Downloads/Logo%20bgremoved.png" alt="RemoLight Logo" />
+		<div class="loading-spinner"></div>
+		<p class="mt-4 text-lg">Loading Dashboard...</p>
+	</div>
+
+	<!-- Main Dashboard -->
+	<div id="dashboard-wrapper" class="hidden">
+		<div class="main-container-wrapper">
+			<!-- Collapsible Sidebar -->
+			<aside id="collapsible-sidebar" class="flex flex-col">
+				<div>
+					<div class="sidebar-brand-wrap sidebar-brand text-[var(--text-color)]">
+						<div class="sidebar-brand-inner">
+							<img class="sidebar-logo" src="file:///C:/Users/ANUSHEK%20DAS/Downloads/Logo%20bgremoved.png" alt="Logo" />
+							<span class="sidebar-link-text ml-2 font-bold">RemoLight</span>
+						</div>
+					</div>
+					<nav class="flex flex-col p-2 space-y-2 mt-2">
+						<a href="#" class="nav-item flex items-center p-3 rounded-lg whitespace-nowrap hover:bg-gray-700/50" onclick="showPage('dashboard-page')">
+							<i class="fas fa-tachometer-alt fa-fw text-xl w-14 text-center"></i><span class="sidebar-link-text ml-4">Dashboard</span>
+						</a>
+						<a href="#" class="nav-item flex items-center p-3 rounded-lg whitespace-nowrap hover:bg-gray-700/50" onclick="showPage('machine-status-page')">
+							<i class="fas fa-cogs fa-fw text-xl w-14 text-center"></i><span class="sidebar-link-text ml-4">Machine Status</span>
+						</a>
+						<a href="#" class="nav-item flex items-center p-3 rounded-lg whitespace-nowrap hover:bg-gray-700/50" onclick="showPage('ai-reports-page')">
+							<i class="fas fa-chart-pie fa-fw text-xl w-14 text-center"></i><span class="sidebar-link-text ml-4">AI Reports</span>
+						</a>
+						<a href="#" class="nav-item flex items-center p-3 rounded-lg whitespace-nowrap hover:bg-gray-700/50" onclick="showPage('system-health-page')">
+							<i class="fas fa-heartbeat fa-fw text-xl w-14 text-center"></i><span class="sidebar-link-text ml-4">System Health</span>
+						</a>
+						<a href="#" class="nav-item flex items-center p-3 rounded-lg whitespace-nowrap hover:bg-gray-700/50" onclick="showPage('connected-sensors-page')">
+							<i class="fas fa-satellite-dish fa-fw text-xl w-14 text-center"></i><span class="sidebar-link-text ml-4">Connected Sensors</span>
+						</a>
+						<a href="#" class="nav-item flex items-center p-3 rounded-lg whitespace-nowrap hover:bg-gray-700/50" onclick="showPage('safety-page')">
+							<i class="fas fa-shield-alt fa-fw text-xl w-14 text-center"></i><span class="sidebar-link-text ml-4">Safety</span>
+						</a>
+					</nav>
+				</div>
+				<div class="mt-auto p-2 space-y-2">
+					<button class="ask-ai-button nav-item flex items-center p-3 rounded-lg whitespace-nowrap w-full" onclick="toggleAiPanel()" title="Ask AI">
+						<span class="ai-orb w-6 h-6"></span>
+						<span class="sidebar-link-text ml-4">Ask AI</span>
+					</button>
+					<a href="#" class="nav-item flex items-center p-3 rounded-lg whitespace-nowrap hover:bg-gray-700/50 w-full" onclick="logout()">
+						<i class="fas fa-sign-out-alt fa-fw text-xl w-14 text-center"></i>
+						<span class="sidebar-link-text ml-4">Log Out</span>
+					</a>
+				</div>
+			</aside>
+
+			<!-- Main App Container -->
+			<div class="main-container">
+				<!-- Main Content Area -->
+				<div id="content-container">
+					<!-- Header -->
+					<header id="main-header" class="card p-4 flex items-center justify-between mb-8">
+						<div class="flex items-center">
+							<div class="w-12 h-12 rounded-full bg-purple-600 flex items-center justify-center mr-4"><i class="fas fa-user-circle text-white text-3xl"></i></div>
+							<div><h1 class="text-xl font-bold" id="profileName">Good Evening, Anushek</h1><p class="text-sm text-[var(--text-muted-color)]">All systems are running good</p></div>
+						</div>
+						<div class="flex items-center justify-end space-x-2 sm:space-x-4">
+							<div class="relative flex-grow max-w-xs sm:max-w-lg">
+								<i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted-color)]"></i>
+								<input type="text" id="searchInput" placeholder="Search..." class="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-full py-2 pl-12 pr-4 focus:outline-none" />
+							</div>
+							<button id="theme-toggle" class="w-10 h-10 rounded-full bg-[var(--bg-color)] flex items-center justify-center icon-effect"><i id="theme-icon" class="fas fa-moon text-lg"></i></button>
+							<div class="dropdown" id="settings-dropdown">
+								<button class="dropdown-trigger w-10 h-10 rounded-full bg-[var(--bg-color)] flex items-center justify-center"><i class="fas fa-cog"></i></button>
+								<div class="dropdown-content">
+									<a href="#" class="dropdown-item" onclick="openSettingsModal()"><i class="fas fa-palette fa-fw mr-3 text-blue-400"></i> Appearance</a>
+									<a href="#" class="dropdown-item"><i class="fas fa-bell fa-fw mr-3 text-yellow-400"></i> Notifications</a>
+									<a href="#" class="dropdown-item"><i class="fas fa-sync-alt fa-fw mr-3 text-green-400"></i> Data Refresh</a>
+								</div>
+							</div>
+							<button class="w-10 h-10 rounded-full bg-[var(--bg-color)] flex items-center justify-center"><i class="fas fa-bell"></i></button>
+							<div class="dropdown" id="profile-dropdown">
+								<div class="dropdown-trigger w-10 h-10 rounded-full bg-white flex items-center justify-center cursor-pointer"><i class="fas fa-user text-gray-800"></i></div>
+								 <div class="dropdown-content">
+									<a href="#" class="dropdown-item" onclick="toggleProfilePanel()"><i class="fas fa-user-circle fa-fw mr-3 text-purple-400"></i> View Profile</a>
+								</div>
+							</div>
+						</div>
+					</header>
+
+					<!-- ========================= DASHBOARD PAGE ========================= -->
+					<div id="dashboard-page" class="page-content">
+						<main class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+							<div class="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+								<div class="square-card p-4 searchable-item" data-search="Voltage"><div class="flex items-start justify-between"><div class="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center"><i class="fas fa-bolt text-white"></i></div><div class="text-right"><p class="text-[var(--text-muted-color)] text-sm">Voltage</p><p class="text-2xl font-semibold">230V</p></div></div><div class="relative w-full h-16 mt-auto"><canvas id="voltageGraph"></canvas></div></div>
+								<div class="square-card p-4 searchable-item" data-search="Current"><div class="flex items-start justify-between"><div class="w-10 h-10 rounded-xl bg-green-500 flex items-center justify-center"><i class="fas fa-charging-station text-white"></i></div><div class="text-right"><p class="text-[var(--text-muted-color)] text-sm">Current</p><p class="text-2xl font-semibold">15A</p></div></div><div class="relative w-full h-16 mt-auto"><canvas id="currentGraph"></canvas></div></div>
+								<div class="square-card p-4 searchable-item" data-search="Power Factor"><div class="flex items-start justify-between"><div class="w-10 h-10 rounded-xl bg-yellow-500 flex items-center justify-center"><i class="fas fa-percent text-white"></i></div><div class="text-right"><p class="text-[var(--text-muted-color)] text-sm">Power Factor</p><p class="text-2xl font-semibold">0.95</p></div></div><div class="relative w-full h-16 mt-auto"><canvas id="powerFactorGraph"></canvas></div></div>
+								<div class="square-card p-4 searchable-item" data-search="Power"><div class="flex items-start justify-between"><div class="w-10 h-10 rounded-xl bg-red-500 flex items-center justify-center"><i class="fas fa-plug text-white"></i></div><div class="text-right"><p class="text-[var(--text-muted-color)] text-sm">Power</p><p class="text-2xl font-semibold">3.45 kW</p></div></div><div class="relative w-full h-16 mt-auto"><canvas id="powerGraph"></canvas></div></div>
+							</div>
+							<div class="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+								<div class="square-card p-6 searchable-item" data-search="Uptime"><h3 class="text-lg font-semibold">Uptime</h3><p class="text-4xl font-bold text-green-500 mt-auto">2h 40m 4s</p></div>
+								<div class="square-card p-6 searchable-item" data-search="Active Machines"><h3 class="text-lg font-semibold">Active Machines</h3><p class="text-4xl font-bold mt-auto">4/4</p></div>
+								<div class="square-card p-6 searchable-item" data-search="Energy/Unit"><h3 class="text-lg font-semibold">Energy/Unit</h3><p class="text-4xl font-bold mt-auto">0.85 kWh</p></div>
+								<div class="card consumption-gradient rounded-3xl p-6 flex flex-col items-center justify-center text-center col-span-1 sm:col-span-2 lg:col-span-4 h-60 searchable-item" data-search="Total Consumption"><h2 class="text-2xl font-bold">Total Consumption</h2><p class="text-6xl font-extrabold my-4">12,500 kWh</p><p class="text-gray-200 text-sm">Past 30 Days</p></div>
+							</div>
+							<!-- Plant Performance Overview with hourly x-axis -->
+							<div class="lg:col-span-4 card p-6 rounded-2xl mt-6 searchable-item" data-search="Plant Performance Overview">
+								<h2 class="text-lg font-semibold mb-4">Plant Performance Overview</h2>
+								<div class="relative h-64"><canvas id="efficiencyChart"></canvas></div>
+							</div>
+						</main>
+					</div>
+
+					<!-- ========================= MACHINE STATUS PAGE ========================= -->
+					<div id="machine-status-page" class="hidden-page page-content">
+						<h1 class="text-4xl font-extrabold mb-8">Machine Status</h1>
+						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+							<!-- Feeder cards will be dynamically generated here -->
+						</div>
+						<div class="card p-6 rounded-2xl mb-8 searchable-item" data-search="Feeder Power Consumption Trends">
+							<h2 class="text-xl font-bold mb-4">Feeder Power Consumption Trends (kW)</h2>
+							<div class="relative h-80"><canvas id="feederPowerConsumptionChart"></canvas></div>
+						</div>
+						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+							<div class="machine-card searchable-item" data-search="Operational State"><div class="flex items-center justify-between mb-4"><h2 class="text-xl font-bold">Operational State</h2><i class="fas fa-play-circle text-green-500 text-3xl"></i></div><div class="space-y-2 text-sm flex-grow"><p><span class="font-semibold">Status:</span> <span class="text-green-400">Running</span></p><p><span class="font-semibold">Mode:</span> Auto</p><p><span class="font-semibold">Last start:</span> 2025-08-18 08:00 AM</p><p><span class="font-semibold">Last stop:</span> 2025-08-17 07:00 PM</p></div></div>
+							<div class="machine-card searchable-item" data-search="Performance Metrics"><div class="flex items-center justify-between mb-4"><h2 class="text-xl font-bold">Performance Metrics</h2><i class="fas fa-chart-line text-blue-500 text-3xl"></i></div><div class="space-y-2 text-sm flex-grow"><p><span class="font-semibold">RPM:</span> 1200</p><p><span class="font-semibold">Load:</span> 75%</p><p><span class="font-semibold">Energy:</span> <span class="text-yellow-400">8.2 kWh (current)</span></p><p><span class="font-semibold">Efficiency:</span> 92%</p></div></div>
+							<div class="machine-card searchable-item" data-search="Fault Diagnostics"><div class="flex items-center justify-between mb-4"><h2 class="text-xl font-bold">Fault Diagnostics</h2><i class="fas fa-exclamation-triangle text-yellow-500 text-3xl"></i></div><div class="space-y-2 text-sm flex-grow"><p class="text-yellow-400 font-semibold">Code: E-102</p><p>Description: Bearing vibration high</p><p><span class="font-semibold">Severity:</span> Warning</p><p><span class="font-semibold">Action:</span> Inspect and lubricate bearing</p><p><span class="font-semibold">History:</span> <a href="#" class="text-purple-400 hover:underline">View Log</a></p></div></div>
+						</div>
+					</div>
+
+					<!-- ========================= AI REPORTS PAGE ========================= -->
+					<div id="ai-reports-page" class="hidden-page page-content">
+						<h1 class="text-4xl font-extrabold mb-8">AI Reports</h1>
+						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+							<div class="ai-report-card flex flex-col items-center searchable-item" data-search="Predictive Maintenance Failure Risk"><h2 class="text-xl font-bold mb-4">Predictive Maintenance</h2><canvas id="maintenanceIndicator" width="200" height="200"></canvas><div class="mt-4 text-center"><p class="font-semibold text-lg">Estimated Time to Failure</p><p class="text-sm text-[var(--text-muted-color)]">CNC-01 Bearing</p></div></div>
+							<div class="ai-report-card md:col-span-2 searchable-item" data-search="Performance Forecasting"><h2 class="text-xl font-bold mb-4">Performance Forecasting</h2><div class="relative h-64"><canvas id="performanceForecastChart"></canvas></div></div>
+							<div class="ai-report-card lg:col-span-2 searchable-item" data-search="Efficiency Analysis">
+								<h2 class="text-xl font-bold mb-4">Efficiency Analysis</h2>
+								<div class="relative h-64"><canvas id="efficiencyBarChart"></canvas></div>
+							</div>
+							<div class="ai-report-card searchable-item" data-search="Fault Pattern Recognition"><h2 class="text-xl font-bold mb-4">Fault Pattern Recognition</h2><div class="relative h-64"><canvas id="faultPieChart"></canvas></div></div>
+						</div>
+					</div>
+
+					<!-- ========================= SYSTEM HEALTH PAGE ========================= -->
+					<div id="system-health-page" class="hidden-page page-content">
+						<h1 class="text-4xl font-extrabold mb-8">System Health</h1>
+						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+							<div class="card p-6 searchable-item" data-search="API Server Status"><div class="flex items-center justify-between"><h3 class="text-lg font-semibold">API Server Status</h3><span class="px-3 py-1 text-xs font-bold text-white bg-green-500 rounded-full">Operational</span></div><p class="text-sm text-[var(--text-muted-color)] mt-2">Main API endpoint is responsive.</p><p class="mt-4"><span class="font-semibold">Latency:</span> 45ms</p></div>
+							<div class="card p-6 searchable-item" data-search="Database Connection"><div class="flex items-center justify-between"><h3 class="text-lg font-semibold">Database Connection</h3><span class="px-3 py-1 text-xs font-bold text-white bg-green-500 rounded-full">Connected</span></div><p class="text-sm text-[var(--text-muted-color)] mt-2">Primary cluster is healthy.</p><p class="mt-4"><span class="font-semibold">Active Queries:</span> 12</p></div>
+							<div class="card p-6 searchable-item" data-search="Sensor Gateway"><div class="flex items-center justify-between"><h3 class="text-lg font-semibold">Sensor Gateway</h3><span class="px-3 py-1 text-xs font-bold text-white bg-yellow-500 rounded-full">Degraded</span></div><p class="text-sm text-[var(--text-muted-color)] mt-2">High packet loss detected.</p><p class="mt-4"><span class="font-semibold">Packet Loss:</span> 8%</p></div>
+							
+							<div class="card p-6 lg:col-span-3 searchable-item" data-search="Real-time CPU Usage"><h2 class="text-lg font-semibold mb-4">Real-time CPU Usage</h2><div class="relative h-48"><canvas id="cpuUsageChart"></canvas></div></div>
+							
+							<div class="card p-6 lg:col-span-2 searchable-item" data-search="Memory Usage"><h2 class="text-lg font-semibold mb-4">Memory Usage</h2><div class="relative h-64"><canvas id="memoryUsageChart"></canvas></div></div>
+							<div class="card p-6 searchable-item" data-search="Service Status"><h2 class="text-lg font-semibold mb-4">Service Status</h2><div class="relative h-64"><canvas id="serviceStatusPieChart"></canvas></div></div>
+
+						</div>
+					</div>
+					
+					<!-- ========================= CONNECTED SENSORS PAGE ========================= -->
+					<div id="connected-sensors-page" class="hidden-page page-content">
+						<h1 class="text-4xl font-extrabold mb-8">Connected Sensors</h1>
+						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+							<div class="card p-6 text-center searchable-item" data-search="Total Sensors"><p class="text-sm text-[var(--text-muted-color)]">Total Sensors</p><p class="text-4xl font-bold">152</p></div>
+							<div class="card p-6 text-center searchable-item" data-search="Online Sensors"><p class="text-sm text-[var(--text-muted-color)]">Online</p><p class="text-4xl font-bold text-green-500">148</p></div>
+							<div class="card p-6 text-center searchable-item" data-search="Warning Sensors"><p class="text-sm text-[var(--text-muted-color)]">Warnings</p><p class="text-4xl font-bold text-yellow-500">3</p></div>
+							<div class="card p-6 text-center searchable-item" data-search="Offline Sensors"><p class="text-sm text-[var(--text-muted-color)]">Offline</p><p class="text-4xl font-bold text-red-500">1</p></div>
+						</div>
+
+						<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+							<div class="card p-6 lg:col-span-2 searchable-item" data-search="Sensor Types Distribution"><h2 class="text-lg font-semibold mb-4">Sensor Types Distribution</h2><div class="relative h-64"><canvas id="sensorTypesChart"></canvas></div></div>
+							<div class="card p-6 searchable-item" data-search="Sensor Status"><h2 class="text-lg font-semibold mb-4">Sensor Status</h2><div class="relative h-64"><canvas id="sensorStatusPieChart"></canvas></div></div>
+						</div>
+
+						<div class="card p-0 overflow-hidden searchable-item" data-search="Sensors Table">
+							<table class="w-full text-left" id="sensors-table">
+								<thead class="bg-gray-800/50"><tr><th class="p-4">Sensor ID</th><th class="p-4">Type</th><th class="p-4">Location</th><th class="p-4">Status</th><th class="p-4">Last Reading</th></tr></thead>
+								<tbody>
+									<tr class="border-b border-[var(--border-color)]">
+										<td class="p-4">TEMP-001</td><td class="p-4">Temperature</td><td class="p-4">Feeder 1</td>
+										<td class="p-4"><span class="px-2 py-1 text-xs text-white bg-green-500 rounded-full">Online</span></td><td class="p-4">72°C</td>
+									</tr>
+									<tr class="border-b border-[var(--border-color)]">
+										<td class="p-4">VIBR-003</td><td class="p-4">Vibration</td><td class="p-4">CNC-02 Bearing</td>
+										<td class="p-4"><span class="px-2 py-1 text-xs text-white bg-yellow-500 rounded-full">Warning</span></td><td class="p-4">0.8 g</td>
+									</tr>
+									<tr class="border-b border-[var(--border-color)]">
+										<td class="p-4">PRES-002</td><td class="p-4">Pressure</td><td class="p-4">Hydraulic Pump</td>
+										<td class="p-4"><span class="px-2 py-1 text-xs text-white bg-green-500 rounded-full">Online</span></td><td class="p-4">5.8 bar</td>
+									</tr>
+									<tr>
+										<td class="p-4">CURR-005</td><td class="p-4">Current</td><td class="p-4">Main Power Line</td>
+										<td class="p-4"><span class="px-2 py-1 text-xs text-white bg-red-500 rounded-full">Offline</span></td><td class="p-4">N/A</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+					</div>
+					
+					<!-- ========================= SAFETY PAGE ========================= -->
+					<div id="safety-page" class="hidden-page page-content">
+						<h1 class="text-4xl font-extrabold mb-8">Safety Dashboard</h1>
+						
+						<!-- Real-Time Safety Alerts -->
+						<div class="mb-8">
+							<h2 class="text-2xl font-bold mb-4">Real-Time Safety Alerts</h2>
+							<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+								<div class="safety-card p-4 flex items-center searchable-item" data-search="Live Fault Detection Overload Short Circuit Ground Fault">
+									<i class="fas fa-bolt text-3xl text-yellow-400 mr-4"></i>
+									<div><p class="font-semibold">Live Fault Detection</p><p class="text-sm text-[var(--text-muted-color)]">No active faults</p></div>
+								</div>
+								<div class="safety-card p-4 flex items-center searchable-item" data-search="Emergency Shutdown Notifications">
+									<i class="fas fa-power-off text-3xl text-red-500 mr-4"></i>
+									<div><p class="font-semibold">Emergency Shutdown</p><p class="text-sm text-green-400">All systems operational</p></div>
+								</div>
+								<div class="safety-card p-4 flex items-center searchable-item" data-search="Fire Risk Overheating Warnings">
+									<i class="fas fa-fire-alt text-3xl text-orange-500 mr-4"></i>
+									<div><p class="font-semibold">Fire/Overheating Risk</p><p class="text-sm text-green-400">Normal</p></div>
+								</div>
+								<div class="safety-card p-4 flex items-center searchable-item" data-search="Unauthorized Access Alerts">
+									<i class="fas fa-user-secret text-3xl text-blue-400 mr-4"></i>
+									<div><p class="font-semibold">Unauthorized Access</p><p class="text-sm text-[var(--text-muted-color)]">No alerts</p></div>
+								</div>
+							</div>
+						</div>
+
+						<!-- Protective Equipment & Protocols -->
+						<div class="mb-8">
+							 <h2 class="text-2xl font-bold mb-4">Protective Equipment & Protocols</h2>
+							 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+								 <div class="card p-6 searchable-item" data-search="PPE Checklist Safety Training Status">
+									 <h3 class="text-lg font-bold mb-3">Personnel Readiness</h3>
+									 <div class="space-y-3">
+										 <p><i class="fas fa-hard-hat fa-fw mr-2 text-blue-400"></i> PPE Checklist: <span class="text-green-400 font-semibold">All Clear</span></p>
+										 <p><i class="fas fa-user-graduate fa-fw mr-2 text-purple-400"></i> Safety Training Status: <span class="font-semibold">18/20 Certified</span></p>
+									 </div>
+								 </div>
+								 <div class="card p-6 searchable-item" data-search="Lockout Tagout First Aid Emergency Contact">
+									 <h3 class="text-lg font-bold mb-3">Emergency Procedures</h3>
+									 <div class="space-y-3">
+										 <p><i class="fas fa-lock fa-fw mr-2 text-yellow-400"></i> Lockout/Tagout Procedures: <a href="#" class="text-purple-400 hover:underline">View Document</a></p>
+										 <p><i class="fas fa-first-aid fa-fw mr-2 text-red-400"></i> First Aid & Emergency Contacts: <a href="#" class="text-purple-400 hover:underline">View Info</a></p>
+									 </div>
+								 </div>
+							 </div>
+						</div>
+
+						<!-- System Health & Risk Monitoring -->
+						<div class="mb-8">
+							<h2 class="text-2xl font-bold mb-4">System Health & Risk Monitoring</h2>
+							<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+								<div class="card p-6 searchable-item" data-search="Voltage Current Threshold Monitoring">
+									<h3 class="text-lg font-bold mb-3">Threshold Monitoring</h3>
+									<p class="text-4xl font-bold text-green-500">Stable</p>
+									<p class="text-sm text-[var(--text-muted-color)]">Voltage & Current within limits</p>
+								</div>
+								<div class="card p-6 searchable-item" data-search="Transformer Circuit Breaker Health">
+									<h3 class="text-lg font-bold mb-3">Equipment Health</h3>
+									<p class="text-4xl font-bold text-green-500">Healthy</p>
+									<p class="text-sm text-[var(--text-muted-color)]">Transformer & Breakers OK</p>
+								</div>
+								<div class="card p-6 searchable-item" data-search="Load Balancing Risk Indicator">
+									<h3 class="text-lg font-bold mb-3">Load Balancing Risk</h3>
+									<p class="text-4xl font-bold text-yellow-500">Low</p>
+									<p class="text-sm text-[var(--text-muted-color)]">Minor fluctuations detected</p>
+								</div>
+							</div>
+						</div>
+						
+						 <!-- Smart Suggestions -->
+						<div>
+							<h2 class="text-2xl font-bold mb-4">Smart Suggestions (AI-Driven)</h2>
+							<div class="space-y-4">
+								<div class="card p-4 flex items-start searchable-item" data-search="AI Suggest Preventive Actions">
+									<i class="fas fa-lightbulb text-2xl text-yellow-400 mt-1 mr-4"></i>
+									<div><p class="font-semibold">Suggest Preventive Actions</p><p class="text-sm text-[var(--text-muted-color)]">AI recommends inspecting Feeder 3 cooling system due to slightly elevated temperature patterns this week.</p></div>
+								</div>
+								<div class="card p-4 flex items-start searchable-item" data-search="AI Highlight High-Risk Zones">
+									<i class="fas fa-map-marker-alt text-2xl text-red-500 mt-1 mr-4"></i>
+									<div><p class="font-semibold">Highlight High-Risk Zones</p><p class="text-sm text-[var(--text-muted-color)]">No high-risk zones identified based on current data.</p></div>
+								</div>
+								<div class="card p-4 flex items-start searchable-item" data-search="AI Recommend Equipment Upgrades">
+									<i class="fas fa-arrow-alt-circle-up text-2xl text-green-500 mt-1 mr-4"></i>
+									<div><p class="font-semibold">Recommend Equipment Upgrades</p><p class="text-sm text-[var(--text-muted-color)]">Consider upgrading circuit breaker CB-102; it is nearing its end-of-life cycle.</p></div>
+								</div>
+							</div>
+						</div>
+
+					</div>
+
+				</div>
+			</div>
+		</div>
+	</div>
+	
+	<!-- AI Side Panel -->
+	<aside id="ai-panel">
+		<div class="flex items-center justify-between mb-4">
+			<div class="flex items-center space-x-2">
+				<span class="ai-orb"></span>
+				<h2 class="text-lg font-semibold">AI Assistant</h2>
+			</div>
+			<button class="text-[var(--text-muted-color)] hover:text-[var(--text-color)]" onclick="toggleAiPanel()"><i class="fas fa-times text-xl"></i></button>
+		</div>
+		<div id="chatHistory" class="flex-grow space-y-4 overflow-y-auto pr-2">
+			<div class="flex"><div class="chat-bubble ai">Hello, I'm your AI Assistant. How can I help?</div></div>
+		</div>
+		<div class="mt-4">
+			<p class="text-sm text-[var(--text-muted-color)] mb-2">Or try these prompts:</p>
+			<div class="flex flex-wrap gap-2">
+				<button class="ai-prompt-btn">Summarize today's performance</button>
+				<button class="ai-prompt-btn">Any maintenance alerts?</button>
+				<button class="ai-prompt-btn">Forecast energy usage for tomorrow</button>
+			</div>
+		</div>
+		<div class="flex mt-4 space-x-2"><input id="chatInput" type="text" placeholder="Write your message..." class="flex-grow p-3 rounded-xl bg-[var(--bg-color)] border border-[var(--border-color)] placeholder-[var(--text-muted-color)] focus:outline-none focus:ring-2 focus:ring-purple-500"><button id="sendBtn" class="w-12 h-12 rounded-xl bg-purple-600 flex items-center justify-center text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg></button></div>
+		<div id="typingIndicator" class="text-sm text-gray-400 mt-2" style="display: none;">AI is typing...</div>
+	</aside>
+
+	<!-- Profile Side Panel -->
+	<aside id="profile-panel">
+		<div class="flex items-center justify-between mb-4" style="position: relative; z-index: 1;">
+			<h2 class="text-lg font-semibold">User Profile</h2>
+			<button class="text-[var(--text-muted-color)] hover:text-[var(--text-color)]" onclick="toggleProfilePanel()"><i class="fas fa-times text-xl"></i></button>
+		</div>
+		<div class="flex-grow space-y-4 overflow-y-auto pr-2" style="position: relative; z-index: 1;">
+			 <!-- Basic Information -->
+			<div>
+				<h3 class="text-lg font-semibold mb-2 flex items-center"><i class="fas fa-user-circle fa-fw mr-3 text-purple-400"></i> Basic Information</h3>
+				<div class="metal-surface p-4 rounded-lg space-y-3">
+					<div><label class="text-sm text-[var(--text-muted-color)]">Full Name</label><input type="text" id="profile-edit-fullName" class="profile-input" disabled></div>
+					<div><label class="text-sm text-[var(--text-muted-color)]">Email</label><input type="email" id="profile-edit-email" class="profile-input" disabled></div>
+					<p><strong>Username:</strong> <span id="profile-username"></span></p>
+					<p><strong>Role:</strong> Administrator</p>
+				</div>
+			</div>
+			<!-- Personalization -->
+			<div>
+				<h3 class="text-lg font-semibold mb-2 flex items-center"><i class="fas fa-palette fa-fw mr-3 text-blue-400"></i> Personalization</h3>
+				 <div class="metal-surface p-4 rounded-lg space-y-2">
+					<p><strong>Theme:</strong> <span id="profile-theme"></span></p>
+					<p><strong>Language:</strong> English (US)</p>
+				</div>
+			</div>
+			 <!-- About Me -->
+			<div>
+				<h3 class="text-lg font-semibold mb-2 flex items-center"><i class="fas fa-info-circle fa-fw mr-3 text-yellow-400"></i> About Me</h3>
+				 <div class="metal-surface p-4 rounded-lg">
+					<textarea id="profile-edit-bio" class="profile-input" rows="3" disabled>"Dedicated to optimizing plant performance through data-driven insights."</textarea>
+				</div>
+			</div>
+		</div>
+		<div class="mt-4 flex space-x-2" style="position: relative; z-index: 1;">
+			<button id="editProfileBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Edit</button>
+			<button id="saveProfileBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg hidden">Save</button>
+		</div>
+	</aside>
+
+
+	<!-- Settings Modal -->
+	<div id="settingsModal" class="modal-overlay">
+		<div class="modal-content">
+			<div class="flex justify-between items-center mb-6">
+				<h2 class="text-2xl font-bold">Settings</h2>
+				<button onclick="closeSettingsModal()"><i class="fas fa-times text-xl"></i></button>
+			</div>
+			<div>
+				<h3 class="text-lg font-semibold mb-4">Appearance</h3>
+				<div class="flex items-center justify-between p-4 rounded-lg bg-[var(--bg-color)]">
+					<span>Toggle Light/Dark Mode</span>
+					<button id="modal-theme-toggle" class="w-12 h-7 rounded-full p-1 flex items-center transition-colors duration-300 bg-gray-700">
+						<span id="modal-theme-icon-container" class="w-5 h-5 rounded-full bg-white flex items-center justify-center transform transition-transform duration-300">
+						   <i id="modal-theme-icon" class="fas fa-moon text-sm text-gray-800"></i>
+						</span>
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		// =================================================================================
+		// SCRIPT SETUP AND GLOBAL VARIABLES
+		// =================================================================================
+		const charts = {};
+		const pages = ['dashboard-page', 'machine-status-page', 'ai-reports-page', 'system-health-page', 'connected-sensors-page', 'safety-page'];
+		let predictiveMaintenanceInterval = null;
+		const validAdminIds = ["ANUSHEK1234", "DEBRAJ1234"];
+		const adminData = {
+			"ANUSHEK1234": { name: "Anushek", email: "anushek@remolight.com" },
+			"DEBRAJ1234": { name: "Debraj", email: "debraj@remolight.com" }
+		};
+		let currentAdmin = null;
+
+		const body = document.body;
+		const collapsibleSidebar = document.getElementById('collapsible-sidebar');
+		const themeToggleButton = document.getElementById('theme-toggle');
+		const themeIcon = document.getElementById('theme-icon');
+		const aiPanel = document.getElementById('ai-panel');
+		const profilePanel = document.getElementById('profile-panel');
+
+		// =================================================================================
+		// AUTHENTICATION
+		// =================================================================================
+		const loginBtn = document.getElementById('loginBtn');
+		const adminIdInput = document.getElementById('adminIdInput');
+		const loginError = document.getElementById('loginError');
+
+		const handleLogin = () => {
+			const adminId = adminIdInput.value.toUpperCase();
+			if (validAdminIds.includes(adminId)) {
+				currentAdmin = adminId;
+				loginError.classList.add('hidden');
+				document.getElementById('login-page').classList.add('hidden');
+				document.getElementById('loading-screen').classList.remove('hidden');
+				
+				setTimeout(() => {
+					document.getElementById('loading-screen').classList.add('hidden');
+					document.getElementById('dashboard-wrapper').classList.remove('hidden');
+					initializeDashboard();
+				}, 2000);
+
+			} else {
+				loginError.classList.remove('hidden');
+			}
+		};
+
+		loginBtn.addEventListener('click', (e) => {
+			const r = document.createElement('span');
+			r.className = 'rl-ripple';
+			const rect = e.currentTarget.getBoundingClientRect();
+			r.style.left = (e.clientX - rect.left) + 'px';
+			r.style.top  = (e.clientY - rect.top)  + 'px';
+			e.currentTarget.appendChild(r);
+			setTimeout(()=>r.remove(), 700);
+			handleLogin();
+		});
+		adminIdInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleLogin(); });
+		
+		const logout = () => {
+			currentAdmin = null;
+			document.getElementById('dashboard-wrapper').classList.add('hidden');
+			document.getElementById('login-page').classList.remove('hidden');
+			adminIdInput.value = '';
+			body.classList.remove('panel-active');
+			aiPanel.classList.remove('active');
+			profilePanel.classList.remove('active');
+		}
+		window.logout = logout;
+
+		// Cursor-follow tilt for login card
+		(function setupTilt(){
+			const card = document.getElementById('rlLoginCard');
+			const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+			if(!card || prefersReduced) return;
+
+			let ticking = false;
+			let currentX = 0, currentY = 0;
+			const maxTilt = 10;
+			function onMove(e){
+			  
+				const rect = card.getBoundingClientRect();
+				const cx = rect.left + rect.width / 2;
+				const cy = rect.top + rect.height / 2;
+				const x = (e.clientX - cx) / (rect.width / 2);
+				const y = (e.clientY - cy) / (rect.height / 2);
+				currentX = Math.max(-1, Math.min(1, x));
+				currentY = Math.max(-1, Math.min(1, y));
+				requestFrame();
+			}
+			function requestFrame(){
+				if(ticking) return;
+				ticking = true;
+				window.requestAnimationFrame(()=>{
+					const rotateY = currentX * maxTilt;
+				  
+					const rotateX = -currentY * maxTilt;
+					card.style.transform = 'rotateX(' + rotateX.toFixed(2) + 'deg) rotateY(' + rotateY.toFixed(2) + 'deg)';
+					ticking = false;
+				});
+			}
+			function reset(){ card.style.transform = 'rotateX(0deg) rotateY(0deg)'; }
+
+			card.addEventListener('mousemove', onMove);
+			card.addEventListener('mouseleave', reset);
+			card.addEventListener('mouseenter', reset);
+			card.addEventListener('touchmove', (e)=>{
+				const t = e.touches[0]; if(!t) return; onMove(t);
+			}, {passive:true});
+			card.addEventListener('touchend', reset);
+		})();
+
+		// =================================================================================
+		// THEME MANAGEMENT
+		// =================================================================================
+		const applyTheme = (theme) => {
+			const isLight = theme === 'light';
+			body.classList.toggle('light-theme', isLight);
+			
+			themeIcon.classList.toggle('fa-moon', !isLight);
+			themeIcon.classList.toggle('fa-sun', isLight);
+
+			const modalThemeToggle = document.getElementById('modal-theme-toggle');
+			const modalThemeIconContainer = document.getElementById('modal-theme-icon-container');
+			const modalThemeIcon = document.getElementById('modal-theme-icon');
+			
+			modalThemeToggle.classList.toggle('bg-purple-600', isLight);
+			modalThemeToggle.classList.toggle('bg-gray-700', !isLight);
+			modalThemeIconContainer.classList.toggle('translate-x-5', isLight);
+			modalThemeIcon.classList.toggle('fa-moon', !isLight);
+			modalThemeIcon.classList.toggle('fa-sun', isLight);
+
+			localStorage.setItem('theme', theme);
+			updateAllChartThemes();
+		};
+
+		themeToggleButton.addEventListener('click', () => applyTheme(body.classList.contains('light-theme') ? 'dark' : 'light'));
+		document.getElementById('modal-theme-toggle').addEventListener('click', () => applyTheme(body.classList.contains('light-theme') ? 'dark' : 'light'));
+
+		// =================================================================================
+		// UI INTERACTION (SIDEBAR, PANELS, DROPDOWNS, MODALS)
+		// =================================================================================
+		collapsibleSidebar.addEventListener('mouseenter', () => !body.classList.contains('panel-active') && body.classList.add('sidebar-expanded'));
+		collapsibleSidebar.addEventListener('mouseleave', () => body.classList.remove('sidebar-expanded'));
+
+		const togglePanel = (panel) => {
+			const isOpening = !panel.classList.contains('active');
+			const otherPanel = panel === aiPanel ? profilePanel : aiPanel;
+			otherPanel.classList.remove('active');
+
+			if (isOpening) {
+				body.classList.remove('sidebar-expanded');
+				body.classList.add('panel-active');
+				panel.classList.add('active');
+			} else {
+				body.classList.remove('panel-active');
+				panel.classList.remove('active');
+			}
+		};
+		
+		const toggleAiPanel = () => togglePanel(aiPanel);
+		const toggleProfilePanel = () => { populateProfilePanel(); togglePanel(profilePanel); };
+
+		window.toggleAiPanel = toggleAiPanel;
+		window.toggleProfilePanel = toggleProfilePanel;
+
+		// Dropdowns
+		const dropdownTriggers = document.querySelectorAll('.dropdown-trigger');
+		dropdownTriggers.forEach(trigger => {
+			trigger.addEventListener('click', (e) => {
+				e.stopPropagation();
+				const dropdown = trigger.closest('.dropdown');
+			  
+				const wasActive = dropdown.classList.contains('active');
+				document.querySelectorAll('.dropdown.active').forEach(d => d.classList.remove('active'));
+				if (!wasActive) dropdown.classList.add('active');
+			});
+		});
+		window.addEventListener('click', () => { document.querySelectorAll('.dropdown.active').forEach(d => d.classList.remove('active')); });
+
+		const openSettingsModal = () => document.getElementById('settingsModal').style.display = 'flex';
+		const closeSettingsModal = () => document.getElementById('settingsModal').style.display = 'none';
+		window.openSettingsModal = openSettingsModal;
+		window.closeSettingsModal = closeSettingsModal;
+
+		// Profile Panel
+		const editProfileBtn = document.getElementById('editProfileBtn');
+		const saveProfileBtn = document.getElementById('saveProfileBtn');
+		const profileInputs = document.querySelectorAll('#profile-panel .profile-input');
+
+		const populateProfilePanel = () => {
+			const admin = adminData[currentAdmin];
+			document.getElementById('profile-edit-fullName').value = admin.name;
+			document.getElementById('profile-edit-email').value = admin.email;
+			document.getElementById('profile-username').textContent = currentAdmin;
+			document.getElementById('profile-theme').textContent = body.classList.contains('light-theme') ? 'Light' : 'Dark';
+		}
+
+		editProfileBtn.addEventListener('click', () => {
+			profileInputs.forEach(input => input.disabled = false);
+			editProfileBtn.classList.add('hidden');
+			saveProfileBtn.classList.remove('hidden');
+		});
+
+		saveProfileBtn.addEventListener('click', () => {
+			const newName = document.getElementById('profile-edit-fullName').value;
+			const newEmail = document.getElementById('profile-edit-email').value;
+			adminData[currentAdmin].name = newName;
+			adminData[currentAdmin].email = newEmail;
+			document.getElementById('profileName').textContent = `Good Evening, ${newName}`;
+			profileInputs.forEach(input => input.disabled = true);
+			saveProfileBtn.classList.add('hidden');
+			editProfileBtn.classList.remove('hidden');
+		});
+
+		// =================================================================================
+		// PAGE NAVIGATION & CHART INITIALIZATION
+		// =================================================================================
+		const showPage = (pageId) => {
+			pages.forEach(id => document.getElementById(id)?.classList.add('hidden-page'));
+			document.getElementById(pageId)?.classList.remove('hidden-page');
+
+			document.querySelectorAll('.nav-item').forEach(link => link.classList.remove('active'));
+			document.querySelector(`[onclick="showPage('${pageId}')"]`)?.classList.add('active');
+
+			if (predictiveMaintenanceInterval) clearInterval(predictiveMaintenanceInterval);
+
+			setTimeout(() => {
+				if (pageId === 'dashboard-page') {
+					createMiniGraph('voltageGraph', '#3b82f6'); createMiniGraph('currentGraph', '#22c55e');
+					createMiniGraph('powerFactorGraph', '#eab308'); createMiniGraph('powerGraph', '#ef4444');
+					createEfficiencyChart();
+				} else if (pageId === 'machine-status-page') {
+					renderFeederCards();
+					createFeederPowerConsumptionChart();
+				} else if (pageId === 'ai-reports-page') {
+					createPerformanceForecastChart(); createEfficiencyBarChart();
+					createFaultPieChart(); startMaintenanceUpdate();
+				} else if (pageId === 'system-health-page') {
+					createCpuUsageChart();
+					createMemoryUsageChart();
+					createServiceStatusPieChart();
+				} else if (pageId === 'connected-sensors-page') {
+					createSensorTypesChart();
+					createSensorStatusPieChart();
+				}
+			}, 0);
+		};
+
+		// =================================================================================
+		// CHART CREATION & THEME UPDATING
+		// =================================================================================
+		const getThemeColors = () => {
+			const isLight = body.classList.contains('light-theme');
+			return {
+				ticks: isLight ? '#64748b' : '#a0aec0', 
+				grid: isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.1)',
+				legend: isLight ? '#1e293b' : '#fff', 
+				pieBorder: isLight ? '#fff' : '#0b070f'
+			};
+		};
+
+		const updateAllChartThemes = () => {
+			const colors = getThemeColors();
+			Object.values(charts).forEach(chart => {
+				if (chart && chart.ctx) {
+					if(chart.options.scales) {
+						Object.keys(chart.options.scales).forEach(axis => {
+						   if(chart.options.scales[axis].ticks) chart.options.scales[axis].ticks.color = colors.ticks;
+						   if(chart.options.scales[axis].grid) chart.options.scales[axis].grid.color = colors.grid;
+						});
+					}
+					if (chart.options.plugins.legend) chart.options.plugins.legend.labels.color = colors.legend;
+					if (chart.config.type === 'pie' || chart.config.type === 'doughnut') chart.data.datasets.forEach(d => d.borderColor = colors.pieBorder);
+					chart.update();
+				}
+			});
+		};
+
+		const createChart = (id, config) => {
+			if (charts[id]) charts[id].destroy();
+			const ctx = document.getElementById(id)?.getContext('2d');
+			if (ctx) charts[id] = new Chart(ctx, config);
+		};
+		
+		const createMiniGraph = (id, color) => createChart(id, { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ data: Array.from({length: 10}, () => Math.random() * 20 + 5), borderColor: color, borderWidth: 2, pointRadius: 0, fill: false, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false }, tooltip: { enabled: false } } } });
+		
+		const createEfficiencyChart = () => {
+			const hours = ['00:00','02:00','04:00','06:00','08:00','10:00','12:00','14:00','16:00','18:00','20:00','22:00'];
+			createChart('efficiencyChart', {
+				type: 'line',
+				data: {
+					labels: hours,
+					datasets: [{
+						label: 'Efficiency',
+						data: hours.map(()=> Math.floor(60 + Math.random()*30)),
+						fill: true,
+						borderColor: 'rgb(140, 122, 230)',
+						tension: 0.4,
+						backgroundColor: 'rgba(140, 122, 230, 0.2)'
+					}]
+				},
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					scales: {
+						y: { beginAtZero: true, max: 100, ticks: { color: getThemeColors().ticks }, grid: { color: getThemeColors().grid } },
+						x: { ticks: { color: getThemeColors().ticks }, grid: { color: getThemeColors().grid } }
+					},
+					plugins: { legend: { display: false } }
+				}
+			});
+		};
+
+		const feederData = [
+			{ id: 1, name: 'Feeder 1', status: 'on' },
+			{ id: 2, name: 'Feeder 2', status: 'off' },
+			{ id: 3, name: 'Feeder 3', status: 'on' },
+			{ id: 4, name: 'Feeder 4', status: 'off' },
+		];
+
+		function toggleFeederStatus(feederId) {
+			const feeder = feederData.find(f => f.id === feederId);
+			if (feeder) { feeder.status = feeder.status === 'on' ? 'off' : 'on'; renderFeederCards(); }
+		}
+
+		function renderFeederCards() {
+			const container = document.querySelector('#machine-status-page .grid');
+			container.innerHTML = '';
+			feederData.forEach(feeder => {
+				const cardHTML = `
+					<div class="feeder-card searchable-item" data-search="${feeder.name}">
+						<h3 class="text-lg font-bold mb-2">${feeder.name}</h3>
+						<p class="mb-4">Status: <span class="font-bold feeder-status ${feeder.status}">${feeder.status.toUpperCase()}</span></p>
+						<div class="flex space-x-2">
+							<button onclick="toggleFeederStatus(${feeder.id})" class="feeder-btn on ${feeder.status === 'on' ? 'active' : ''}">ON</button>
+							<button onclick="toggleFeederStatus(${feeder.id})" class="feeder-btn off ${feeder.status === 'off' ? 'active' : ''}">OFF</button>
+						</div>
+					</div>
+				`;
+				container.innerHTML += cardHTML;
+			});
+		}
+
+		const createFeederPowerConsumptionChart = () => {
+			const datasets = [
+				{ label: 'Feeder 1', data: Array.from({length: 12}, () => Math.random() * 10 + 50), borderColor: '#3b82f6', tension: 0.4, fill: false },
+				{ label: 'Feeder 2', data: Array.from({length: 12}, () => Math.random() * 10 + 45), borderColor: '#22c55e', tension: 0.4, fill: false },
+				{ label: 'Feeder 3', data: Array.from({length: 12}, () => Math.random() * 10 + 55), borderColor: '#f97316', tension: 0.4, fill: false },
+				{ label: 'Feeder 4', data: Array.from({length: 12}, () => Math.random() * 10 + 40), borderColor: '#ef4444', tension: 0.4, fill: false }
+			];
+			createChart('feederPowerConsumptionChart', { type: 'line', data: { datasets: datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'time', time: { unit: 'hour', displayFormats: { hour: 'HH:mm' } }, ticks: { color: getThemeColors().ticks }, grid: { color: getThemeColors().grid } }, y: { beginAtZero: false, ticks: { color: getThemeColors().ticks }, grid: { color: getThemeColors().grid } } }, plugins: { legend: { position: 'top', labels: { color: getThemeColors().legend } } } } });
+		};
+
+		const createPerformanceForecastChart = () => createChart('performanceForecastChart', { type: 'line', data: { labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'], datasets: [ { label: 'Energy (kWh)', data: [50, 65, 80, 95, 70, 55, 60], borderColor: '#8c7ae6', backgroundColor: 'rgba(140, 122, 230, 0.2)', fill: true, tension: 0.4 }, { label: 'Forecast', data: [null, null, null, 95, 110, 105, 90], borderColor: '#22c55e', borderDash: [5, 5], fill: false, tension: 0.4 } ] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { color: getThemeColors().ticks }, grid: { color: getThemeColors().grid } }, y: { beginAtZero: true, ticks: { color: getThemeColors().ticks }, grid: { color: getThemeColors().grid } } }, plugins: { legend: { labels: { color: getThemeColors().legend } } } } });
+		
+		const createEfficiencyBarChart = () => createChart('efficiencyBarChart', {
+			type: 'bar',
+			data: {
+				labels: ['Machine 1', 'Machine 2', 'Machine 3', 'Machine 4'],
+				datasets: [{ label: 'Energy/Unit (kWh)', data: [0.85, 0.92, 0.78, 0.95], backgroundColor: ['#3b82f6', '#22c55e', '#f97316', '#ef4444'] }]
+			},
+			options: {
+				responsive: true, maintainAspectRatio: false,
+				scales: {
+					x: { ticks: { color: getThemeColors().ticks }, grid: { display: false } },
+					y: { beginAtZero: true, ticks: { color: getThemeColors().ticks }, grid: { color: getThemeColors().grid } }
+				},
+				plugins: { legend: { labels: { color: getThemeColors().legend } } }
+			}
+		});
+
+		const createFaultPieChart = () => createChart('faultPieChart', { type: 'pie', data: { labels: ['Communication', 'Overheating', 'Vibration', 'Electrical'], datasets: [{ data: [45, 25, 20, 10], backgroundColor: ['#f87171', '#fbbf24', '#38bdf8', '#a78bfa'], borderColor: getThemeColors().pieBorder, borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: getThemeColors().legend } } } } });
+		const startMaintenanceUpdate = () => { if (predictiveMaintenanceInterval) clearInterval(predictiveMaintenanceInterval); let p = 85, d = -1; predictiveMaintenanceInterval = setInterval(() => { p += d * 0.5; if (p <= 75) d = 1; else if (p >= 85) d = -1; drawCircularIndicator('maintenanceIndicator', p, p < 70 ? '#ef4444' : p < 80 ? '#f97316' : '#8c7ae6'); }, 500); };
+		const drawCircularIndicator = (id, p, color) => { const canvas = document.getElementById(id); if (!canvas) return; const ctx = canvas.getContext('2d'), size = canvas.width, r = size / 2.5, cx = size / 2, cy = size / 2; const end = (p / 100) * 2 * Math.PI; ctx.clearRect(0, 0, size, size); ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.strokeStyle = getThemeColors().grid; ctx.lineWidth = 15; ctx.stroke(); ctx.beginPath(); ctx.arc(cx, cy, r, -0.5 * Math.PI, -0.5 * Math.PI + end); ctx.strokeStyle = color; ctx.lineWidth = 15; ctx.lineCap = 'round'; ctx.stroke(); ctx.font = `bold 40px Inter`; ctx.fillStyle = getThemeColors().ticks; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(`${Math.round(p)}%`, cx, cy - 10); ctx.font = `16px Inter`; ctx.fillStyle = '#888'; ctx.fillText('Failure Risk', cx, cy + 20); };
+
+		const createCpuUsageChart = () => createChart('cpuUsageChart', { type: 'line', data: { labels: Array(10).fill(''), datasets: [{ label: 'CPU %', data: Array.from({length: 10}, () => Math.random() * 50 + 20), fill: true, borderColor: '#38bdf8', tension: 0.4, backgroundColor: 'rgba(56, 189, 248, 0.2)' }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 100, ticks: { color: getThemeColors().ticks }, grid: { color: getThemeColors().grid } }, x: { ticks: { color: getThemeColors().ticks }, grid: { color: getThemeColors().grid } } }, plugins: { legend: { display: false } } } });
+		const createMemoryUsageChart = () => createChart('memoryUsageChart', { type: 'line', data: { labels: ['-9m', '-8m', '-7m', '-6m', '-5m', '-4m', '-3m', '-2m', '-1m', 'Now'], datasets: [{ label: 'RAM (GB)', data: [10.2, 10.5, 11.0, 10.8, 11.5, 11.2, 11.8, 12.1, 11.9, 12.4], borderColor: '#a78bfa', backgroundColor: 'rgba(167, 139, 250, 0.2)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: false, max: 16, ticks: { color: getThemeColors().ticks }, grid: { color: getThemeColors().grid } }, x: { ticks: { color: getThemeColors().ticks }, grid: { color: getThemeColors().grid } } }, plugins: { legend: { display: false } } } });
+		const createServiceStatusPieChart = () => createChart('serviceStatusPieChart', { type: 'doughnut', data: { labels: ['Running', 'Degraded', 'Stopped'], datasets: [{ data: [18, 2, 1], backgroundColor: ['#22c55e', '#facc15', '#ef4444'], borderColor: getThemeColors().pieBorder, borderWidth: 4 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: getThemeColors().legend } } } } });
+		const createSensorTypesChart = () => createChart('sensorTypesChart', { type: 'bar', data: { labels: ['Temperature', 'Vibration', 'Pressure', 'Current', 'Humidity'], datasets: [{ label: 'Count', data: [45, 35, 30, 28, 14], backgroundColor: ['#ef4444', '#f97316', '#3b82f6', '#8b5cf6', '#14b8a6'] }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { color: getThemeColors().ticks }, grid: { color: getThemeColors().grid } }, y: { ticks: { color: getThemeColors().ticks }, grid: { display: false } } }, plugins: { legend: { display: false } } } });
+		const createSensorStatusPieChart = () => createChart('sensorStatusPieChart', { type: 'pie', data: { labels: ['Online', 'Warning', 'Offline'], datasets: [{ data: [148, 3, 1], backgroundColor: ['#22c55e', '#facc15', '#ef4444'], borderColor: getThemeColors().pieBorder, borderWidth: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: getThemeColors().legend } } } } });
+
+		// =================================================================================
+		// SEARCH FUNCTIONALITY
+		// =================================================================================
+		document.getElementById('searchInput').addEventListener('keyup', function() {
+			const query = this.value.toLowerCase();
+			const items = document.querySelectorAll('.searchable-item');
+			items.forEach(item => { const text = item.dataset.search.toLowerCase(); item.style.display = text.includes(query) ? '' : 'none'; });
+		});
+		
+		// =================================================================================
+		// AI CHAT FUNCTIONALITY
+		// =================================================================================
+		const chatHistory = document.getElementById('chatHistory');
+		const chatInput = document.getElementById('chatInput');
+		const sendBtn = document.getElementById('sendBtn');
+		const typingIndicator = document.getElementById('typingIndicator');
+		const aiPrompts = document.querySelectorAll('.ai-prompt-btn');
+
+		const predefinedResponses = {
+			"summarize today's performance": "Today's overall plant efficiency is at 88%, a 3% increase from yesterday. Total energy consumption is 5,200 kWh. All machines are operating within normal parameters.",
+			"any maintenance alerts?": "There is one active maintenance alert: Machine CNC-02 shows high bearing vibration. It's recommended to schedule an inspection within the next 48 hours.",
+			"forecast energy usage for tomorrow": "Based on current trends and production schedules, tomorrow's forecasted energy usage is approximately 5,500 kWh, with peak consumption expected around 2 PM.",
+			"show me the current voltage": "Current voltage reading is 230V, which is within normal operating range. The voltage has been stable for the past 4 hours.",
+			"what's the power consumption": "Current power consumption is 3.45 kW. Total consumption for today is 5,200 kWh. The system is operating at 75% capacity.",
+			"check machine status": "All 4 machines are currently active. Machine 1: Running at 92% efficiency, Machine 2: Running at 88% efficiency, Machine 3: Running at 85% efficiency, Machine 4: Running at 90% efficiency.",
+			"system health report": "System health is excellent. CPU usage: 45%, Memory usage: 12.4GB, API Server: Operational, Database: Connected, Sensor Gateway: Degraded (8% packet loss).",
+			"energy efficiency tips": "Based on current data, here are some efficiency tips: 1) Consider reducing idle time on Machine 3, 2) Optimize cooling system for Feeder 1, 3) Schedule maintenance for CNC-02 bearing within 48 hours.",
+			"alert status": "Current alerts: 1 warning (CNC-02 bearing vibration), 3 sensors showing warnings, 1 sensor offline. All critical systems are operational.",
+			"production forecast": "Based on current efficiency trends, expected production for tomorrow is 1,250 units with energy consumption of 5,500 kWh. Peak production hours: 10 AM - 2 PM."
+		};
+
+		const addMessage = (message, sender) => {
+			const messageWrapper = document.createElement('div');
+			messageWrapper.className = 'flex';
+			const bubble = document.createElement('div');
+			bubble.className = `chat-bubble ${sender} p-3 rounded-lg max-w-xs`;
+			bubble.textContent = message;
+			if (sender === 'user') {
+				messageWrapper.classList.add('justify-end');
+				bubble.classList.add('bg-purple-600', 'text-white');
+			} else {
+				 bubble.classList.add('bg-gray-700', 'text-white');
+				 if(body.classList.contains('light-theme')){
+					bubble.classList.remove('bg-gray-700', 'text-white');
+					bubble.classList.add('bg-gray-200', 'text-black');
+				 }
+			}
+			messageWrapper.appendChild(bubble);
+			chatHistory.appendChild(messageWrapper);
+			chatHistory.scrollTop = chatHistory.scrollHeight;
+		};
+
+		const handleSend = () => {
+			const message = chatInput.value.trim();
+			if (!message) return;
+			addMessage(message, 'user');
+			chatInput.value = '';
+			typingIndicator.style.display = 'block';
+			setTimeout(() => {
+				const response = predefinedResponses[message.toLowerCase()] || generateDynamicResponse(message);
+				addMessage(response, 'ai');
+				typingIndicator.style.display = 'none';
+			}, 1200);
+		};
+
+		const generateDynamicResponse = (message) => {
+			const lowerMessage = message.toLowerCase();
+			
+			// Check for keywords and generate contextual responses
+			if (lowerMessage.includes('voltage') || lowerMessage.includes('power')) {
+				return "Current voltage is 230V and power consumption is 3.45 kW. Both are within normal operating parameters.";
+			} else if (lowerMessage.includes('machine') || lowerMessage.includes('equipment')) {
+				return "All machines are operational. Machine 1-4 are running at 92%, 88%, 85%, and 90% efficiency respectively.";
+			} else if (lowerMessage.includes('sensor') || lowerMessage.includes('monitoring')) {
+				return "152 sensors are connected, 148 online, 3 with warnings, and 1 offline. All critical monitoring systems are functional.";
+			} else if (lowerMessage.includes('efficiency') || lowerMessage.includes('performance')) {
+				return "Current plant efficiency is 88%. Energy per unit is 0.85 kWh. Performance has improved 3% from yesterday.";
+			} else if (lowerMessage.includes('alert') || lowerMessage.includes('warning')) {
+				return "Active alerts: 1 maintenance warning (CNC-02 bearing), 3 sensor warnings, 1 sensor offline. No critical alerts.";
+			} else if (lowerMessage.includes('help') || lowerMessage.includes('support')) {
+				return "I can help you with: performance summaries, maintenance alerts, energy forecasts, machine status, system health, and efficiency tips. Just ask!";
+			} else {
+				return "I understand you're asking about '" + message + "'. I can help with plant performance, machine status, energy consumption, alerts, and system health. Try asking about specific metrics or use the prompt buttons above.";
+			}
+		};
+
+		// Add event listeners for prompt buttons
+		document.addEventListener('DOMContentLoaded', function() {
+			const promptButtons = document.querySelectorAll('.ai-prompt-btn');
+			promptButtons.forEach(button => {
+				button.addEventListener('click', function() {
+					const promptText = this.textContent;
+					addMessage(promptText, 'user');
+					typingIndicator.style.display = 'block';
+					setTimeout(() => {
+						const response = predefinedResponses[promptText.toLowerCase()] || generateDynamicResponse(promptText);
+						addMessage(response, 'ai');
+						typingIndicator.style.display = 'none';
+					}, 1200);
+				});
+			});
+		});
+
+		sendBtn.addEventListener('click', handleSend);
+		chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSend(); });
+
+		// =================================================================================
+		// INITIALIZATION
+		// =================================================================================
+		const initializeDashboard = () => {
+			const admin = adminData[currentAdmin];
+			document.getElementById('profileName').textContent = `Good Evening, ${admin.name}`;
+			applyTheme(localStorage.getItem('theme') || 'dark');
+			showPage('dashboard-page');
+		};
+	</script>
+</body>
+</html>
